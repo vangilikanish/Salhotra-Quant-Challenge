@@ -1,70 +1,61 @@
 '''
 Code base was provided by basic template
 Our stragey was turtle trading more can be learned here: https://bigpicture.typepad.com/comments/files/turtlerules.pdf
-Help with coding was provided by this community thred: https://www.quantopian.com/posts/solved-turtle-trading-strategy
+Help with coding was provided by these community thred:
+- https://www.quantopian.com/posts/turtle-trading-strategy
+- https://www.quantopian.com/posts/solved-turtle-trading-strategy
 '''
+#import statements
 import quantopian.algorithm as algo
-from quantopian.pipeline.data.builtin import USEquityPricing
-from quantopian.pipeline.filters import QTradableStocksUS
 import math
 import talib
 import pandas as pd
-from quantopian.pipeline.filters.morningstar import Q1500US, Q500US
-from quantopian.algorithm import attach_pipeline, pipeline_output
- 
+
+#main funtion and runs once
 def initialize(context):
     context.securities = [
-        symbol('SPY')
+        symbol('QQQ'), #invesco QQQ trust
         ] 
     
-    # Rebalance every day, 1 hour after market open.
-    algo.schedule_function(
+    #triggers the rebalance every day 1 hour after market opens
+    schedule_function(
         rebalance,
         algo.date_rules.every_day(),
         algo.time_rules.market_open(hours=1),
     )
  
-    context.trade_percent = 0.01
-    context.atrlength = 20
-    context.portfolio_size = context.portfolio.cash + context.portfolio.positions_value
-    context.recordme = pd.DataFrame({'symbols':[],'add_time':[],'last_buy_price':[]}) 
-    
+    #initalizing global var that will be used later
+    context.portfolio_size = context.portfolio.cash + context.portfolio.positions_value #calculates the portfolio size
+    context.recordme = pd.DataFrame({'symbols':[],'add_time':[],'last_buy_price':[]}) #creates a dataframe
+
+#analyzes the assets every day and makes decision
 def rebalance(context, data):
- 
-    hist = data.history(context.securities, ['high', 'low', 'close'], 200, '1d')
-    account_size = context.portfolio_size
-    #Install a dataframe to hold buying records
- 
+    hist = data.history(context.securities, ['high', 'low', 'close'], 200, '1d') #history of security
+    account_size = context.portfolio_size #creating local var for account
+     
+    #actual algo deciding for each security
     for sec in context.securities:
-        ATR = talib.ATR(hist['high'][sec], hist['low'][sec], hist['close'][sec], timeperiod=context.atrlength)[-1]
-        cur_price = data.current(sec, 'price')
-        position = context.portfolio.positions[sec].amount
-        unit = math.floor(account_size*0.01 / ATR) 
+        ATR = talib.ATR(hist['high'][sec], hist['low'][sec], hist['close'][sec], timeperiod=20)[-1] #calculate the atr within 20 days
+        cur_price = data.current(sec, 'price') #price of security 1 hour after market opens
+        position = context.portfolio.positions[sec].amount #checking if any postions are already owned
+        unit = math.floor(account_size*0.01 / ATR) #calculaitng the amout to buy depending on volatility'ATR'
         
-#Buy strategy here:
- 
+        #buying statement
         if cur_price > hist['high'][sec][-20:-1].max() and position is 0:
-            order(sec, unit)
-            '''
-            if len(recordme)!=0:                                                           
-               recordme = recordme[recordme['symbols']!=sec] '''
-            context.recordme = context.recordme.append(pd.DataFrame({'symbols':[sec],'add_time':[1],'last_buy_price':[cur_price]})) #record stock           
-        elif sec in context.portfolio.positions: #buy 1 unit if sec price up 0.5N
-            last_price =context.recordme[context.recordme['symbols'] == sec]['last_buy_price'].astype(float)
-            #last_price= context.portfolio.positions[symbol('AAPL'),symbol('AMZN')].cost_basis
-            add_price =(last_price[0] + 0.5 * ATR)
-            add_unit = context.recordme[context.recordme['symbols']  == sec]['add_time'].astype(float)               
-            log.info(context.recordme) 
-            log.info(add_price)         
+            order(sec, unit) #orders 'sec' for x 'units'
+            context.recordme = context.recordme.append(pd.DataFrame({'symbols':[sec],'add_time':[1],'last_buy_price':[cur_price]})) #record stock 
+        
+        #what to do if there are already bought the security before
+        elif sec in context.portfolio.positions:
+            last_price =context.recordme[context.recordme['symbols'] == sec]['last_buy_price'].astype(float) #var for previous price
+            add_price =(last_price[0] + 0.5 * ATR) #caluvalting to check if more should be bought
             
-            if cur_price > add_price and add_unit[0] < 4:  #this is the point strategy stopped because nothing in it?
-                unit = account_size*0.01 / ATR
-                order(sec,unit) 
-                context.recordme.loc[context.recordme['symbols']== sec,'add_time']=context.recordme[context.recordme['symbols']== sec]['add_time']+1
-                context.recordme.loc[context.recordme['symbols']== sec,'last_buy_price']=cur_price
+            if cur_price > add_price:
+                unit = math(account_size*0.01 / ATR) #recalulating the amount to buy
+                order(sec,unit) #orders 'sec' for x 'units'
+                context.recordme.loc[context.recordme['symbols']== sec,'add_time']=context.recordme[context.recordme['symbols']== sec]['add_time']+1 #update buy time
+                context.recordme.loc[context.recordme['symbols']== sec,'last_buy_price']=cur_price #update the last buy price
             
             if cur_price < (last_price[0] - 2*ATR):
-                order_target_percent(sec,0)
-                #After sell the stock, empty recordme
-                context.recordme = context.recordme[context.recordme['symbols']!=sec]
-    
+                order_target_percent(sec,0) #this means that no orders will be made
+                context.recordme = context.recordme[context.recordme['symbols']!=sec] #empty recordme
