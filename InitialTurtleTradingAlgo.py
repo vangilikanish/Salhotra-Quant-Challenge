@@ -26,7 +26,7 @@ def initialize(context):
  
     #initalizing global var that will be used later
     context.portfolio_size = context.portfolio.cash + context.portfolio.positions_value #calculates the portfolio size
-    context.recordme = pd.DataFrame({'symbols':[],'add_time':[],'last_buy_price':[]}) #creates a dataframe
+    context.record = pd.DataFrame({'symbols':[],'add_time':[],'last_buy_price':[]}) #creates a dataframe
 
 #analyzes the assets every day and makes decision
 def rebalance(context, data):
@@ -43,19 +43,19 @@ def rebalance(context, data):
         #buying statement
         if cur_price > hist['high'][sec][-20:-1].max() and position is 0:
             order(sec, unit) #orders 'sec' for x 'units'
-            context.recordme = context.recordme.append(pd.DataFrame({'symbols':[sec],'add_time':[1],'last_buy_price':[cur_price]})) #record stock 
+            context.record = context.record.append(pd.DataFrame({'symbols':[sec],'add_time':[1],'last_buy_price':[cur_price]})) #record stock 
         
         #what to do if there are already bought the security before
         elif sec in context.portfolio.positions:
-            last_price =context.recordme[context.recordme['symbols'] == sec]['last_buy_price'].astype(float) #var for previous price
+            last_price =context.record[context.record['symbols'] == sec]['last_buy_price'].astype(float) #var for previous price
             add_price =(last_price[0] + 0.5 * ATR) #caluvalting to check if more should be bought
             
             if cur_price > add_price:
-                unit = math(account_size*0.01 / ATR) #recalulating the amount to buy
+                unit = math.floor(account_size*0.01 / ATR) #recalulating the amount to buy
                 order(sec,unit) #orders 'sec' for x 'units'
-                context.recordme.loc[context.recordme['symbols']== sec,'add_time']=context.recordme[context.recordme['symbols']== sec]['add_time']+1 #update buy time
-                context.recordme.loc[context.recordme['symbols']== sec,'last_buy_price']=cur_price #update the last buy price
+                context.record.loc[context.record['symbols']== sec,'add_time']=context.record[context.record['symbols']== sec]['add_time']+1 #update buy time
+                context.record.loc[context.record['symbols']== sec,'last_buy_price']=cur_price #update the last buy price
             
             if cur_price < (last_price[0] - 2*ATR):
                 order_target_percent(sec,0) #this means that no orders will be made
-                context.recordme = context.recordme[context.recordme['symbols']!=sec] #empty recordme
+                context.record = context.record[context.record['symbols']!=sec] #empty record
